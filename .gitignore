@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Environment files
+.env
+.env.local
+.env.*
+*.env
+
+# Runtime outputs
+memory/
+seguidores_screenshots/
+media/
+*.log
+*.sqlite3
+
+# Node/Next.js
+carapix-frontend/node_modules/
+carapix-frontend/.next/
+carapix-frontend/.turbo/
+
+# Misc
+.DS_Store
+*.swp
+tmp_*
