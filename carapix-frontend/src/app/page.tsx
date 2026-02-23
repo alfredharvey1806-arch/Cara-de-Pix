@@ -137,7 +137,7 @@ export default async function Home() {
                   </p>
                   {follower.gpt_summary && (
                     <ul className="list-disc space-y-1 pl-5 text-white/70">
-                      {follower.gpt_summary.split("\n").map((item, idx) => (
+                      {follower.gpt_summary.split("\n").map((item: string, idx: number) => (
                         <li key={idx}>{item}</li>
                       ))}
                     </ul>
