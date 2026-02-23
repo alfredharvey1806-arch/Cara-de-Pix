@@ -1,158 +1,160 @@
 # Cara de Pix – Instagram Follower Intelligence Pipeline
 
-Pipeline completo para classificar seguidores do Instagram, identificar perfis com "cara de pix" (alto potencial de compra) e disponibilizar os resultados em um dashboard Supabase/Next.js.
+Sistema completo para classificar seguidores do Instagram, identificar perfis com alto potencial de compra ("cara de pix") usando OpenAI Vision, e visualizar resultados em um dashboard Supabase + Next.js.
 
-## 🧱 Arquitetura
+## 🎯 O que faz
 
-```
-[Instagram Screenshot Capture]
-        │
-        ▼
-~/Documents/Seguidores/@username_timestamp.png
-        │
-        ▼
-[sync_screenshots_storage.py]
-  ↳ Supabase Storage (bucket instagram-screenshots)
-  ↳ Tabela instagram_followers (status + file_path)
-        │
-        ▼
-[projects/instagram-scraper/analyze_gpt.py]
-  ↳ OpenAI Vision → veredito CRA + mensagem social selling
-  ↳ Atualiza campos gpt_* na tabela
-        │
-        ├──> carapix-frontend (Next.js) consome supabase-js e mostra cards
-        └──> monitor_capture.py / robust_capture.py cuidam da automação e saúde
-```
-
-Componentes principais:
-
-| Pasta/Script | Função |
-|--------------|--------|
-| `projects/instagram-scraper/robust_capture.py` | Captura resiliente com retry, rate limiting e health check |
-| `projects/instagram-scraper/capture_scheduler.py` | Agenda ciclos (modo once/loop/cron) |
-| `sync_screenshots_storage.py` | Envia prints para Supabase Storage + sincroniza banco |
-| `projects/instagram-scraper/analyze_gpt.py` | Chama OpenAI Vision com prompt 6-em-1 "Cara de Pix" |
-| `carapix-frontend/` | Dashboard Next.js + Supabase (cards, filtros, dark theme) |
-| `projects/instagram-scraper/monitor_capture.py` | Painel CLI com status em tempo real |
-| `projects/instagram-scraper/ROBUST_SETUP.md` | Guia detalhado da automação de captura |
-| `projects/instagram-scraper/automation_handler.py` e `crm_upload_handler*.py` | Fluxos auxiliares (integração CRM Lovable) |
+1. **Captura resiliente** de screenshots de perfis Instagram (via Chrome/Selenium)
+2. **Análise GPT Vision** com prompt 6-em-1:
+   - 🟢/🔴 Veredito (tem ou não cara de pix)
+   - CRA Score (0-10, capacidade real de compra)
+   - Justificativa (bullets objetivas)
+   - Classificação (Vale DM | Nutrição | Ignorar)
+   - Alerta (maior risco)
+   - **Mensagem inicial** (social selling amigável pra DM)
+3. **Dashboard** (Next.js + Tailwind) com filtros, cards, e dark theme
+4. **Automação** sem parar – retry automático, health check, rate limiting
 
 ## 🚀 Quick Start
 
-1. **Clone e instale dependências**
-   ```bash
-   git clone https://github.com/alfredharvey1806-arch/Cara-de-Pix.git
-   cd Cara-de-Pix
-   cp .env.example .env
-   python3 -m venv venv && source venv/bin/activate
-   pip install -r requirements.txt
-   npm install --prefix carapix-frontend
-   ```
-2. **Preencha `.env`** com suas chaves Supabase, OpenAI, credenciais do CRM e diretórios locais. Os scripts Python leem essas variáveis automaticamente.
-3. **Atualize o schema no Supabase**
-   ```bash
-   source venv/bin/activate
-   python3 projects/instagram-scraper/migrate_schema.py
-   # siga as instruções e execute o SQL listado no dashboard Supabase
-   ```
-4. **Capture prints com resiliência**
-   ```bash
-   # Execução única (test)
-   python3 projects/instagram-scraper/capture_scheduler.py --mode once --batch-size 5
+### 1. Clone e instale
+```bash
+git clone https://github.com/alfredharvey1806-arch/Cara-de-Pix.git
+cd Cara-de-Pix
+cp .env.example .env
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+npm install --prefix carapix-frontend
+```
 
-   # Produção a cada 5 minutos
-   python3 projects/instagram-scraper/capture_scheduler.py --mode cron --interval 5 --batch-size 5
-   ```
-5. **Sincronize com o Storage**
-   ```bash
-   python3 sync_screenshots_storage.py
-   ```
-6. **Rode a análise GPT**
-   ```bash
-   OPENAI_API_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
-   python3 projects/instagram-scraper/analyze_gpt.py
-   ```
-   - Usa prompt 6-em-1 (veredito, score CRA, bullets, classificação, alerta, mensagem inicial social selling)
-   - Batch configurável via `GPT_BATCH`
-7. **Suba o dashboard**
-   ```bash
-   cd carapix-frontend
-   cp .env.example .env.local  # preencher com URL/anon key Supabase
-   npm run dev   # ou npm run build && npm run start
-   ```
-8. **Monitorar**
-   ```bash
-   python3 projects/instagram-scraper/monitor_capture.py --loop --interval 30
-   tail -f ~/Documents/Seguidores/.metadata/capture.log
-   ```
+### 2. Configure `.env`
+Preencha com suas credenciais:
+```
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+```
 
-## 🔐 Variáveis de Ambiente
+### 3. Setup Supabase
+```bash
+python3 projects/instagram-scraper/migrate_schema.py
+```
+Copie o SQL que aparecer e execute no editor SQL do Supabase Dashboard.
 
-`cp .env.example .env` e defina:
+### 4. Comece a capturar
+```bash
+# Execução única (teste)
+python3 projects/instagram-scraper/capture_scheduler.py --mode once
 
-| Variável | Descrição |
-|----------|-----------|
-| `SUPABASE_URL` | URL do projeto Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | chave service_role (para inserts/updates) |
-| `SUPABASE_ANON_KEY` | opcional (frontend) |
-| `SUPABASE_BUCKET_NAME` | default `instagram-screenshots` |
-| `SCREENSHOTS_DIR` | pasta onde ficam os PNGs (default `~/Documents/Seguidores`) |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | credenciais GPT Vision |
-| `CRM_URL`, `CRM_EMAIL`, `CRM_PASSWORD` | acesso ao Lovable CRM |
-| `INSTAGRAM_USERNAME` / `INSTAGRAM_PASSWORD` | usados pelos agentes de captura |
-| `ANALYSIS_LOG_PATH` | (opcional) caminho customizado para logs |
+# Produção – a cada 5 min (deixa rodando)
+python3 projects/instagram-scraper/capture_scheduler.py --mode cron --interval 5 &
 
-O frontend usa `.env.local` próprio (baseado em `carapix-frontend/.env.example`).
+# Sincronizar prints pro Storage
+python3 sync_screenshots_storage.py
 
-## 🧩 Fluxo Detalhado
+# Rodar análise GPT
+python3 projects/instagram-scraper/analyze_gpt.py
 
-1. **Captura resiliente** – `robust_capture.py` pega perfis com `status="esperando"`, tira print (via Chrome Relay ou Selenium), marca `processando → print feito`, e agenda retry automático (até 3x) se algo falhar.
-2. **Sincronização Storage** – `sync_screenshots_storage.py` garante bucket, envia PNGs e atualiza `file_path` com URL pública.
-3. **Análise GPT/Vision** – `analyze_gpt.py` lê registros com `analysis_status in (pending,error)`, chama OpenAI Vision, parseia resposta no formato bruto e preenche `gpt_score`, `gpt_verdict`, `gpt_classification`, `gpt_summary`, `gpt_alert`, `gpt_dm_hook`.
-4. **Dashboard** – `carapix-frontend` (Next.js + Tailwind) lista cards com filtros por score/classificação, highlight dos 🟢, alertas e hooks de DM.
-5. **CRM Upload (opcional)** – `crm_upload_handler.py` e `crm_upload_handler_v2.py` cuidam do envio dos prints para o Lovable Pix Prospector.
-6. **Monitoramento** – `monitor_capture.py` mostra fila, retries e taxa de sucesso. Logs ficam em `~/Documents/Seguidores/.metadata/capture.log`.
+# Ver status em tempo real
+python3 projects/instagram-scraper/monitor_capture.py --loop --interval 30
+```
 
-## 🛠️ Ferramentas Auxiliares
-
-- `projects/instagram-scraper/ROBUST_SETUP.md`: guia passo a passo para colocar o capturador em produção.
-- `projects/instagram-scraper/FLUXO_AUTOMACAO.md`: documentação do fluxo completo (Drive → Screenshot → Supabase → GPT → CRM).
-- `projects/instagram-scraper/automation_handler.py`: orquestração tudo-em-um (para sub-agentes).
-- `projects/instagram-scraper/STATUS_FINAL.md`: checklist final do agente de seguidores.
-
-## 🧪 Testes & Debug
-
-- Use `python3 projects/instagram-scraper/capture_scheduler.py --mode loop --interval 2 --max-cycles 2` para testar sem cron.
-- Rode `python3 projects/instagram-scraper/monitor_capture.py` para ver fila/resumo.
-- No frontend, `npm run lint` garante consistência.
+### 5. Abrir dashboard
+```bash
+cd carapix-frontend
+npm run dev
+# Acessa http://localhost:3000
+```
 
 ## 📁 Estrutura
 
 ```
 Cara-de-Pix/
-├── carapix-frontend/        # Dashboard Next.js
 ├── projects/instagram-scraper/
-│   ├── robust_capture.py
-│   ├── capture_scheduler.py
-│   ├── monitor_capture.py
-│   ├── analyze_gpt.py
-│   ├── automation_handler.py
-│   ├── ROBUST_SETUP.md
-│   └── ...
-├── sync_screenshots_storage.py
-├── supabase_update.py
+│   ├── robust_capture.py          # Captura com retry + rate limit + health check
+│   ├── capture_scheduler.py       # Agendador (once/loop/cron)
+│   ├── analyze_gpt.py             # OpenAI Vision + prompt 6-em-1
+│   ├── monitor_capture.py         # Dashboard CLI
+│   ├── migrate_schema.py          # SQL pra Supabase (copiar/colar)
+│   └── ROBUST_SETUP.md            # Documentação detalhada
+├── carapix-frontend/              # Dashboard Next.js
+├── sync_screenshots_storage.py    # Sincroniza com Supabase Storage
 ├── requirements.txt
-├── README.md
-└── .env.example
+├── .env.example
+└── README.md
 ```
 
-## ✅ Boas Práticas
+## 🔐 Variáveis de Ambiente
 
-- **Não** comitar `.env`, `memory/`, `seguidores_screenshots/` (já incluídos no `.gitignore`).
-- Executar `pip install -r requirements.txt` após qualquer atualização de dependências.
-- Usar `python3 -m pip install ... && pip freeze > requirements.txt` se adicionar libs.
-- Documentar mudanças significativas em `projects/instagram-scraper/ROBUST_SETUP.md` ou em novos arquivos dentro de `projects/`.
+| Variável | Descrição |
+|----------|-----------|
+| `SUPABASE_URL` | URL do projeto Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave service_role (inserts/updates) |
+| `SUPABASE_ANON_KEY` | Chave anon (frontend) |
+| `OPENAI_API_KEY` | API key OpenAI |
+| `OPENAI_MODEL` | default: `gpt-4.1-mini` |
+| `SCREENSHOTS_DIR` | Pasta de screenshots (default `~/Documents/Seguidores`) |
 
-## 📣 Suporte
+## 🧠 Fluxo Detalhado
 
-Dúvidas ou sugestões? Abra uma issue no repositório ou atualize os arquivos em `projects/instagram-scraper/` conforme o padrão descrito em `ROBUST_SETUP.md`.
+```
+[Screenshot] → [Supabase Storage]
+                    ↓
+            [analyze_gpt.py]
+         (OpenAI Vision + Prompt)
+                    ↓
+      [gpt_verdict, score, msg DM]
+                    ↓
+         [carapix-frontend]
+         (Dashboard + Filtros)
+```
+
+1. **Captura** – `robust_capture.py` pega `status=esperando`, tira screenshot, marca `print feito`
+2. **Sincronização** – `sync_screenshots_storage.py` envia pra Supabase Storage
+3. **Análise** – `analyze_gpt.py` chama OpenAI Vision, parseia resposta, preenche `gpt_*` fields
+4. **Dashboard** – `carapix-frontend` lista cards com filtros por score/classificação
+
+## 🛠️ Ferramentas Auxiliares
+
+- **ROBUST_SETUP.md** – Guia passo a passo da automação
+- **migrate_schema.py** – Gera SQL pra criar tabelas/índices no Supabase
+
+## 🧪 Testando
+
+```bash
+# Teste local (sem cron)
+python3 projects/instagram-scraper/capture_scheduler.py --mode loop --interval 5 --max-cycles 2
+
+# Ver fila/resumo
+python3 projects/instagram-scraper/monitor_capture.py
+
+# Logs
+tail -f ~/Documents/Seguidores/.metadata/capture.log
+```
+
+## 📊 Prompt GPT 6-em-1
+
+O sistema usa um prompt brutalmente honesto que analisa:
+- **Posicionamento profissional** (claro vs vago)
+- **Bio** (adulto funcional vs aspiracional)
+- **Conteúdo** (autoridade vs entretenimento)
+- **Estética** (organizado vs amador)
+- **Renda ativa** (empresa, clientes, projetos)
+
+Resultado: **veredito 🟢/🔴 + score CRA + mensagem de DM conversacional** (não vendedora).
+
+## ✅ Checklist Final
+
+- [ ] `.env` preenchido
+- [ ] Migrations executadas no Supabase
+- [ ] `carapix-frontend/.env.local` configurado
+- [ ] Rodou `pip install -r requirements.txt`
+- [ ] Rodou `npm install --prefix carapix-frontend`
+- [ ] Dashboard abrindo em `http://localhost:3000`
+- [ ] Screenshots capturando e aparecendo no dashboard
+
+## 📞 Suporte
+
+Dúvidas? Veja `ROBUST_SETUP.md` pra documentação detalhada.
